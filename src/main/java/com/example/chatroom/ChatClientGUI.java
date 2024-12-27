@@ -298,7 +298,7 @@ public class ChatClientGUI extends JFrame {
             // 获取用户名
             while (true) {
                 username = JOptionPane.showInputDialog(this, 
-                    "请���入你的用户名：", 
+                    "请输入你的用户名：",
                     "登录", 
                     JOptionPane.QUESTION_MESSAGE);
                     
