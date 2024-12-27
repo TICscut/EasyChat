@@ -9,6 +9,10 @@ import java.io.*;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.util.Base64;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 public class ChatClientGUI extends JFrame {
     private static final String SERVER_ADDRESS = "localhost";
@@ -25,6 +29,8 @@ public class ChatClientGUI extends JFrame {
     private StyledDocument doc;
     private final Color MY_MESSAGE_COLOR = new Color(225, 255, 225);
     private final Color OTHER_MESSAGE_COLOR = new Color(255, 255, 255);
+    private JButton imageButton;
+    private final int MAX_IMAGE_SIZE = 800;
     
     public ChatClientGUI() {
         // 设置窗口基本属性
@@ -56,16 +62,22 @@ public class ChatClientGUI extends JFrame {
         
         // 创建底部消息发送区域
         JPanel bottomPanel = new JPanel(new BorderLayout(5, 5));
-        messageArea = new JTextArea(3, 20); // 3行高的文本区域
+        messageArea = new JTextArea(3, 20);
         messageArea.setLineWrap(true);
         messageArea.setWrapStyleWord(true);
         JScrollPane messageScroll = new JScrollPane(messageArea);
         
+        // 创建按钮面板
+        JPanel buttonPanel = new JPanel(new GridLayout(2, 1, 0, 5));
         sendButton = new JButton("发送");
-        sendButton.setPreferredSize(new Dimension(80, 50));
+        imageButton = new JButton("图片");
+        sendButton.setPreferredSize(new Dimension(80, 25));
+        imageButton.setPreferredSize(new Dimension(80, 25));
+        buttonPanel.add(sendButton);
+        buttonPanel.add(imageButton);
         
         bottomPanel.add(messageScroll, BorderLayout.CENTER);
-        bottomPanel.add(sendButton, BorderLayout.EAST);
+        bottomPanel.add(buttonPanel, BorderLayout.EAST);
         
         // 组装聊天面板
         chatPanel.add(chatScroll, BorderLayout.CENTER);
@@ -107,6 +119,9 @@ public class ChatClientGUI extends JFrame {
                 disconnect();
             }
         });
+        
+        // 添加图片按钮事件
+        imageButton.addActionListener(e -> sendImage());
     }
     
     private void appendMessage(String sender, String message, boolean isMyMessage) {
@@ -142,28 +157,83 @@ public class ChatClientGUI extends JFrame {
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             String message;
+            StringBuilder imageBuilder = null;
+            String imageSender = null;
+            int expectedChunks = 0;
+            int receivedChunks = 0;
+            
             while ((message = reader.readLine()) != null) {
-                final String finalMessage = message;
-                if (finalMessage.startsWith("@USERLIST@")) {
+                if (message.startsWith("@USERLIST@")) {
+                    String finalMessage = message;
                     SwingUtilities.invokeLater(() -> updateUserList(finalMessage.substring(10)));
-                } else {
-                    // 解析消息来源
-                    String sender;
-                    String content;
-                    if (finalMessage.contains(": ")) {
-                        sender = finalMessage.substring(0, finalMessage.indexOf(": "));
-                        content = finalMessage.substring(finalMessage.indexOf(": ") + 2);
-                    } else {
-                        sender = "系统消息";
-                        content = finalMessage;
+                } 
+                else {
+                    // 处理带发��者的消息
+                    String sender = "";
+                    String content = message;
+                    
+                    if (message.contains(": ")) {
+                        sender = message.substring(0, message.indexOf(": "));
+                        content = message.substring(message.indexOf(": ") + 2);
                     }
-                    boolean isMyMessage = sender.equals(username);
-                    appendMessage(sender, content, isMyMessage);
+                    
+                    // 处理图片消息
+                    if (content.startsWith("@IMAGE_START@")) {
+                        try {
+                            // 直接从内容中提取数字部分
+                            String numStr = content.replaceAll("[^0-9]", "");
+                            expectedChunks = Integer.parseInt(numStr);
+                            imageBuilder = new StringBuilder();
+                            receivedChunks = 0;
+                            imageSender = sender;
+                            System.out.println("开始接收图片，预期块数：" + expectedChunks); // 调试信息
+                        } catch (NumberFormatException e) {
+                            System.err.println("无法解析图片块数量: " + content);
+                            imageBuilder = null;
+                            imageSender = null;
+                        }
+                    }
+                    else if (content.startsWith("@IMAGE_CHUNK@") && imageBuilder != null) {
+                        try {
+                            String imageData = content.substring(13);
+                            imageBuilder.append(imageData);
+                            receivedChunks++;
+                            System.out.println("接收到图片块：" + receivedChunks + "/" + expectedChunks); // 调试信息
+                            
+                            // 如果收到所有分块，则显示图片
+                            if (receivedChunks == expectedChunks) {
+                                String base64Image = imageBuilder.toString();
+                                boolean isMyMessage = imageSender.equals(username);
+                                appendImage(imageSender, base64Image, isMyMessage);
+                                imageBuilder = null;
+                                imageSender = null;
+                                System.out.println("图片接收完成"); // 调试信息
+                            }
+                        } catch (Exception e) {
+                            System.err.println("处理图片块时出错: " + e.getMessage());
+                            imageBuilder = null;
+                            imageSender = null;
+                        }
+                    }
+                    else if (content.startsWith("@IMAGE_END@")) {
+                        // 重置图片构建器
+                        imageBuilder = null;
+                        imageSender = null;
+                        System.out.println("图片传输结束"); // 调试信息
+                    }
+                    else if (!content.startsWith("@IMAGE")) {
+                        // 处理普通文本消息
+                        boolean isMyMessage = sender.equals(username);
+                        appendMessage(sender.isEmpty() ? "系统消息" : sender, content, isMyMessage);
+                    }
                 }
             }
         } catch (IOException e) {
             if (!socket.isClosed()) {
-                JOptionPane.showMessageDialog(this, "与服务器的连接已断开！", "错误", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, 
+                    "与服务器的连接已断开！", 
+                    "错误", 
+                    JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -238,11 +308,144 @@ public class ChatClientGUI extends JFrame {
             
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, 
-                "无法连接到服务器！\n" + e.getMessage(), 
+                "无���连接到服务器！\n" + e.getMessage(), 
                 "连接错误", 
                 JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
+    }
+    
+    private void sendImage() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileFilter(new FileNameExtensionFilter(
+            "图片文件", "jpg", "jpeg", "png", "gif"));
+
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                File file = fileChooser.getSelectedFile();
+                BufferedImage originalImage = ImageIO.read(file);
+                
+                // 调整图片大小
+                BufferedImage resizedImage = resizeImageIfNeeded(originalImage);
+                
+                // 将图片转换为Base64字符串
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(resizedImage, "png", baos);
+                byte[] imageBytes = baos.toByteArray();
+                String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+                
+                // 分块发送（每块最大32KB）
+                int chunkSize = 32 * 1024;
+                int chunks = (base64Image.length() + chunkSize - 1) / chunkSize;
+                
+                System.out.println("开始发送图片，总块数：" + chunks); // 调试信息
+                
+                // 发送图片开始标记和总块数
+                writer.println("@IMAGE_START@" + chunks);
+                
+                // 分块发送图片数据
+                for (int i = 0; i < chunks; i++) {
+                    int start = i * chunkSize;
+                    int end = Math.min(start + chunkSize, base64Image.length());
+                    String chunk = base64Image.substring(start, end);
+                    writer.println("@IMAGE_CHUNK@" + chunk);
+                    System.out.println("发送图片块：" + (i + 1) + "/" + chunks); // 调试信息
+                    
+                    // 添加小延迟避免消息堆积
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                
+                // 发送图片结束标记
+                writer.println("@IMAGE_END@");
+                System.out.println("图片发送完成"); // 调试信息
+                
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, 
+                    "无法发送图片：" + e.getMessage(), 
+                    "错误", 
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+    
+    private BufferedImage resizeImageIfNeeded(BufferedImage original) {
+        int width = original.getWidth();
+        int height = original.getHeight();
+        
+        if (width <= MAX_IMAGE_SIZE && height <= MAX_IMAGE_SIZE) {
+            return original;
+        }
+        
+        if (width > height) {
+            float ratio = (float) MAX_IMAGE_SIZE / width;
+            width = MAX_IMAGE_SIZE;
+            height = Math.round(height * ratio);
+        } else {
+            float ratio = (float) MAX_IMAGE_SIZE / height;
+            height = MAX_IMAGE_SIZE;
+            width = Math.round(width * ratio);
+        }
+        
+        BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = resized.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, 
+            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(original, 0, 0, width, height, null);
+        g.dispose();
+        
+        return resized;
+    }
+    
+    private void appendImage(String sender, String base64Image, boolean isMyMessage) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                // 解码Base64图片
+                byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                
+                if (image == null) {
+                    appendMessage(sender, "[图片发送失败]", isMyMessage);
+                    return;
+                }
+                
+                // 创建样式
+                Style style = chatPane.addStyle("ImageStyle", null);
+                StyleConstants.setAlignment(style, 
+                    isMyMessage ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_LEFT);
+                StyleConstants.setBackground(style, 
+                    isMyMessage ? MY_MESSAGE_COLOR : OTHER_MESSAGE_COLOR);
+                
+                // 添加时间和发送者
+                SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
+                String time = sdf.format(new Date());
+                String header = String.format("[%s] %s\n", time, sender);
+                
+                // 插入发送者信息
+                doc.insertString(doc.getLength(), header, style);
+                
+                // 创建带背景色的面板来容纳图片
+                JPanel imagePanel = new JPanel();
+                imagePanel.setBackground(isMyMessage ? MY_MESSAGE_COLOR : OTHER_MESSAGE_COLOR);
+                imagePanel.add(new JLabel(new ImageIcon(image)));
+                
+                // 将面板作为自定义视图插入
+                Style labelStyle = chatPane.addStyle("LabelStyle", null);
+                StyleConstants.setComponent(labelStyle, imagePanel);
+                doc.insertString(doc.getLength(), " ", labelStyle);
+                doc.insertString(doc.getLength(), "\n\n", style);
+                
+                // 滚动到底部
+                chatPane.setCaretPosition(doc.getLength());
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                appendMessage(sender, "[图片显示失败]", isMyMessage);
+            }
+        });
     }
     
     public static void main(String[] args) {

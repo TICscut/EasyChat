@@ -31,11 +31,34 @@ public class ClientHandler implements Runnable {
             updateUserList();
 
             String message;
+            StringBuilder imageBuilder = null;
             while ((message = reader.readLine()) != null) {
                 if (message.equals("exit")) {
                     break;
                 }
-                broadcast(username + ": " + message);
+                
+                // 处理图片消息
+                if (message.startsWith("@IMAGE_START@")) {
+                    // 转发图片开始标记
+                    broadcast(username + ": " + message);
+                    imageBuilder = new StringBuilder();
+                }
+                else if (message.startsWith("@IMAGE_CHUNK@")) {
+                    // 转发图片数据块
+                    broadcast(username + ": " + message);
+                    if (imageBuilder != null) {
+                        imageBuilder.append(message.substring(13));
+                    }
+                }
+                else if (message.startsWith("@IMAGE_END@")) {
+                    // 转发图片结束标记
+                    broadcast(username + ": " + message);
+                    imageBuilder = null;
+                }
+                else {
+                    // 转发普通消息
+                    broadcast(username + ": " + message);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
