@@ -141,9 +141,11 @@ public class ChatClientGUI extends JFrame {
                 // 设置对齐方式
                 StyleConstants.setAlignment(style, isMyMessage ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_LEFT);
                 
-                // 插入消息
+                // 插入消息，将特殊标记替换回换行符
                 doc.insertString(doc.getLength(), header, style);
-                doc.insertString(doc.getLength(), message + "\n\n", style);
+                // 在 lambda 内部创建新的字符串，而不是修改参数
+                String processedMessage = message.replaceAll("@LINE_BREAK@", "\n");
+                doc.insertString(doc.getLength(), processedMessage + "\n\n", style);
                 
                 // 滚动到底部
                 chatPane.setCaretPosition(doc.getLength());
@@ -164,18 +166,21 @@ public class ChatClientGUI extends JFrame {
             
             while ((message = reader.readLine()) != null) {
                 if (message.startsWith("@USERLIST@")) {
-                    String finalMessage = message;
-                    SwingUtilities.invokeLater(() -> updateUserList(finalMessage.substring(10)));
+                    final String userListMessage = message;
+                    SwingUtilities.invokeLater(() -> updateUserList(userListMessage.substring(10)));
                 } 
                 else {
-                    // 处理带发送者的消息
+                    final String currentMessage = message;
                     String sender = "";
-                    String content = message;
+                    String content = currentMessage;
                     
-                    if (message.contains(": ")) {
-                        sender = message.substring(0, message.indexOf(": "));
-                        content = message.substring(message.indexOf(": ") + 2);
+                    if (currentMessage.contains(": ")) {
+                        sender = currentMessage.substring(0, currentMessage.indexOf(": "));
+                        content = currentMessage.substring(currentMessage.indexOf(": ") + 2);
                     }
+                    
+                    final String finalSender = sender;
+                    final String finalContent = content;
                     
                     // 处理图片消息
                     if (content.startsWith("@IMAGE_START@")) {
@@ -203,8 +208,15 @@ public class ChatClientGUI extends JFrame {
                             // 如果收到所有分块，则显示图片
                             if (receivedChunks == expectedChunks) {
                                 String base64Image = imageBuilder.toString();
-                                boolean isMyMessage = imageSender.equals(username);
-                                appendImage(imageSender, base64Image, isMyMessage);
+                                final boolean isMyMessage = imageSender.equals(username);
+                                String finalImageSender = imageSender;
+                                SwingUtilities.invokeLater(() ->
+                                    appendImage(
+                                            finalImageSender,
+                                        base64Image, 
+                                        isMyMessage
+                                    )
+                                );
                                 imageBuilder = null;
                                 imageSender = null;
                                 System.out.println("图片接收完成"); // 调试信息
@@ -223,8 +235,14 @@ public class ChatClientGUI extends JFrame {
                     }
                     else if (!content.startsWith("@IMAGE")) {
                         // 处理普通文本消息
-                        boolean isMyMessage = sender.equals(username);
-                        appendMessage(sender.isEmpty() ? "系统消息" : sender, content, isMyMessage);
+                        final boolean isMyMessage = finalSender.equals(username);
+                        SwingUtilities.invokeLater(() -> 
+                            appendMessage(
+                                finalSender.isEmpty() ? "系统消息" : finalSender, 
+                                finalContent, 
+                                isMyMessage
+                            )
+                        );
                     }
                 }
             }
@@ -241,6 +259,8 @@ public class ChatClientGUI extends JFrame {
     private void sendMessage() {
         String message = messageArea.getText().trim();
         if (!message.isEmpty()) {
+            // 将所有换行符替换为特殊标记
+            message = message.replaceAll("\n", "@LINE_BREAK@");
             writer.println(message);
             messageArea.setText("");
         }
@@ -278,7 +298,7 @@ public class ChatClientGUI extends JFrame {
             // 获取用户名
             while (true) {
                 username = JOptionPane.showInputDialog(this, 
-                    "请输入你的用户名：", 
+                    "请���入你的用户名：", 
                     "登录", 
                     JOptionPane.QUESTION_MESSAGE);
                     
@@ -369,7 +389,7 @@ public class ChatClientGUI extends JFrame {
                     writer.println("@IMAGE_CHUNK@" + chunk);
                     System.out.println("发送图片块：" + (i + 1) + "/" + chunks); // 调试信息
                     
-                    // 添加小延迟避免消息堆积
+                    // 添加小延迟避免消息���积
                     try {
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
