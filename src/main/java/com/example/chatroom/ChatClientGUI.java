@@ -168,7 +168,7 @@ public class ChatClientGUI extends JFrame {
                     SwingUtilities.invokeLater(() -> updateUserList(finalMessage.substring(10)));
                 } 
                 else {
-                    // 处理带发��者的消息
+                    // 处理带发送者的消息
                     String sender = "";
                     String content = message;
                     
@@ -308,7 +308,7 @@ public class ChatClientGUI extends JFrame {
             
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, 
-                "无���连接到服务器！\n" + e.getMessage(), 
+                "无法连接到服务器！\n" + e.getMessage(), 
                 "连接错误", 
                 JOptionPane.ERROR_MESSAGE);
             System.exit(1);
@@ -323,7 +323,25 @@ public class ChatClientGUI extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 File file = fileChooser.getSelectedFile();
+                // 检查文件扩展名
+                String fileName = file.getName().toLowerCase();
+                if (!fileName.endsWith(".jpg") && !fileName.endsWith(".jpeg") 
+                    && !fileName.endsWith(".png") && !fileName.endsWith(".gif")) {
+                    JOptionPane.showMessageDialog(this,
+                        "请选择正确的图片文件格式(jpg, jpeg, png, gif)！",
+                        "格式错误",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                
                 BufferedImage originalImage = ImageIO.read(file);
+                if (originalImage == null) {
+                    JOptionPane.showMessageDialog(this,
+                        "所选文件不是有效的图片文件！",
+                        "格式错误",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
                 
                 // 调整图片大小
                 BufferedImage resizedImage = resizeImageIfNeeded(originalImage);
