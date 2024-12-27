@@ -31,6 +31,8 @@ public class ChatClientGUI extends JFrame {
     private final Color OTHER_MESSAGE_COLOR = new Color(255, 255, 255);
     private JButton imageButton;
     private final int MAX_IMAGE_SIZE = 800;
+
+    private final UserDao userDao = new UserDao();
     
     public ChatClientGUI() {
         // 设置窗口基本属性
@@ -339,29 +341,7 @@ public class ChatClientGUI extends JFrame {
         try {
             socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
             writer = new PrintWriter(socket.getOutputStream(), true);
-            
-            // 获取用户名
-            while (true) {
-                username = JOptionPane.showInputDialog(this, 
-                    "请输入你的用户名：",
-                    "登录", 
-                    JOptionPane.QUESTION_MESSAGE);
-                    
-                if (username == null) {
-                    System.exit(0); // 用户点击取消按钮
-                }
-                
-                username = username.trim();
-                if (!username.isEmpty()) {
-                    break;
-                }
-                
-                JOptionPane.showMessageDialog(this, 
-                    "用户名不能为空！", 
-                    "错误", 
-                    JOptionPane.ERROR_MESSAGE);
-                
-            }
+
             // 获取用户名
             while(true){
                 username = JOptionPane.showInputDialog(this, "请输入你的用户名：", "登录", JOptionPane.QUESTION_MESSAGE);
