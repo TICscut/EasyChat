@@ -31,6 +31,8 @@ public class ChatClientGUI extends JFrame {
     private final Color OTHER_MESSAGE_COLOR = new Color(255, 255, 255);
     private JButton imageButton;
     private final int MAX_IMAGE_SIZE = 800;
+
+    private final UserDao userDao = new UserDao();
     
     public ChatClientGUI() {
         // 设置窗口基本属性
@@ -255,6 +257,51 @@ public class ChatClientGUI extends JFrame {
             }
         }
     }
+
+    private boolean authenticateUser(String username, String password) {
+        try{
+            UserDao.User user = userDao.getUserByName(username);
+            if (user == null) {
+                // 用户不存在
+                JOptionPane.showMessageDialog(this, "用户不存在", "登录失败", JOptionPane.WARNING_MESSAGE);
+            } else if (!password.equals(user.getPassword())) {
+                // 密码不匹配
+                JOptionPane.showMessageDialog(this, "用户密码错误", "登录失败", JOptionPane.WARNING_MESSAGE);
+            } else {
+                // 登录成功
+                JOptionPane.showMessageDialog(this, "登录成功", "登录成功", JOptionPane.INFORMATION_MESSAGE);
+                return true;
+            }
+            return false;
+        } catch (Exception e){
+            System.out.println(e.getMessage());
+        }
+        return false;
+    }
+
+    private String showPasswordDialog(Component parent) {
+        // 创建 JPasswordField 组件
+        JPasswordField passwordField = new JPasswordField();
+
+        // 设置为不可编辑，以防止复制粘贴等操作
+        passwordField.setEditable(true);
+
+        // 创建并配置 JOptionPane 使用自定义输入字段
+        int option = JOptionPane.showConfirmDialog(
+                parent,
+                passwordField,
+                "请输入密码",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        // 如果用户点击了 OK 按钮，则返回密码字符串；否则返回 null
+        if (option == JOptionPane.OK_OPTION) {
+            return new String(passwordField.getPassword());
+        } else {
+            return null;
+        }
+    }
     
     private void sendMessage() {
         String message = messageArea.getText().trim();
@@ -294,27 +341,32 @@ public class ChatClientGUI extends JFrame {
         try {
             socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
             writer = new PrintWriter(socket.getOutputStream(), true);
-            
+
             // 获取用户名
-            while (true) {
-                username = JOptionPane.showInputDialog(this, 
-                    "请输入你的用户名：",
-                    "登录", 
-                    JOptionPane.QUESTION_MESSAGE);
-                    
+            while(true){
+                username = JOptionPane.showInputDialog(this, "请输入你的用户名：", "登录", JOptionPane.QUESTION_MESSAGE);
                 if (username == null) {
-                    System.exit(0); // 用户点击取消按钮
+                    System.exit(0);
                 }
-                
                 username = username.trim();
-                if (!username.isEmpty()) {
+                if(username.isEmpty()){
+                    JOptionPane.showMessageDialog(this, "用户名不能为空！", "错误", JOptionPane.ERROR_MESSAGE);
+                    continue;
+                }
+                // 如果以#开头则跳过密码认证
+                if (!username.startsWith("#")){
+                    String password = showPasswordDialog(this);
+                    if (password == null) {
+                        System.exit(0);
+                    }
+                    if(authenticateUser(username, password)){
+                        break;
+                    }
+                }
+                else{
+                    username = username.substring(1);
                     break;
                 }
-                
-                JOptionPane.showMessageDialog(this, 
-                    "用户名不能为空！", 
-                    "错误", 
-                    JOptionPane.ERROR_MESSAGE);
             }
             
             // 设置窗口标题包含用户名
@@ -432,7 +484,7 @@ public class ChatClientGUI extends JFrame {
         Graphics2D g = resized.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, 
             RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(original, 0, 0, width, height, null);
+        g.drawImage(original, 0, 0, width, height, null); 
         g.dispose();
         
         return resized;
